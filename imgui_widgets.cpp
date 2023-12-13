@@ -2407,6 +2407,40 @@ bool ImGui::DragBehavior(ImGuiID id, ImGuiDataType data_type, void* p_v, float v
     return false;
 }
 
+static void RenderCombinedLabelValue(const char *label, const ImVec2 label_size, ImGuiDataType data_type, void* p_data, const char* format, const ImRect frame_bb, bool inline_label)
+{
+    ImGuiContext& g = *GImGui;
+    const ImGuiStyle& style = g.Style;
+
+    char value_buf[64];
+    const char* value_buf_end = value_buf + ImGui::DataTypeFormatString(value_buf, IM_ARRAYSIZE(value_buf), data_type, p_data, format);
+    if (!inline_label)
+    {
+        if (g.LogEnabled)
+            ImGui::LogSetNextTextDecoration("{", "}");
+        ImGui::RenderTextClipped(frame_bb.Min, frame_bb.Max, value_buf, value_buf_end, NULL, ImVec2(0.5f, 0.5f));
+
+        if (label_size.x > 0.0f)
+            ImGui::RenderText(ImVec2(frame_bb.Max.x + style.ItemInnerSpacing.x, frame_bb.Min.y + style.FramePadding.y), label);
+    }
+    else
+    {
+        const ImVec2 value_size = ImGui::CalcTextSize(value_buf, NULL, true);
+        const ImVec2 value_location = ImVec2(frame_bb.Max.x - style.FramePadding.x - value_size.x, frame_bb.Min.y + style.FramePadding.y);
+
+        const float split = ImMax(value_location.x - style.FramePadding.x * 0.5f, frame_bb.Min.x + style.FramePadding.x);
+
+        const ImVec2 label_location = frame_bb.Min + style.FramePadding;
+        const ImVec2 label_max = ImVec2(ImMin(label_location.x + label_size.x, split - style.FramePadding.x*0.5f), frame_bb.Max.y);
+
+        if (label_location.x < label_max.x)
+            ImGui::RenderTextEllipsis(ImGui::GetCurrentWindow()->DrawList, label_location, label_max, label_max.x, split, label, nullptr, &label_size);
+        if (g.LogEnabled)
+            ImGui::LogSetNextTextDecoration("{", "}");
+        ImGui::RenderTextClipped(ImVec2(ImMax(value_location.x, split + style.FramePadding.x*0.5f), value_location.y), frame_bb.Max - style.FramePadding, value_buf, value_buf_end, &value_size);
+    }
+}
+
 // Note: p_data, p_min and p_max are _pointers_ to a memory address holding the data. For a Drag widget, p_min and p_max are optional.
 // Read code of e.g. DragFloat(), DragInt() etc. or examples in 'Demo->Widgets->Data Types' to understand how to use this function directly.
 bool ImGui::DragScalar(const char* label, ImGuiDataType data_type, void* p_data, float v_speed, const void* p_min, const void* p_max, const char* format, ImGuiSliderFlags flags)
@@ -2421,8 +2455,10 @@ bool ImGui::DragScalar(const char* label, ImGuiDataType data_type, void* p_data,
     const float w = CalcItemWidth();
 
     const ImVec2 label_size = CalcTextSize(label, NULL, true);
+    const bool inline_label = label_size.x > 0 && (flags & ImGuiSliderFlags_InlineLabel) != 0;
+
     const ImRect frame_bb(window->DC.CursorPos, window->DC.CursorPos + ImVec2(w, label_size.y + style.FramePadding.y * 2.0f));
-    const ImRect total_bb(frame_bb.Min, frame_bb.Max + ImVec2(label_size.x > 0.0f ? style.ItemInnerSpacing.x + label_size.x : 0.0f, 0.0f));
+    const ImRect total_bb(frame_bb.Min, frame_bb.Max + ImVec2(!inline_label && label_size.x > 0.0f ? style.ItemInnerSpacing.x + label_size.x : 0.0f, 0.0f));
 
     const bool temp_input_allowed = (flags & ImGuiSliderFlags_NoInput) == 0;
     ItemSize(total_bb, style.FramePadding.y);
@@ -2484,14 +2520,7 @@ bool ImGui::DragScalar(const char* label, ImGuiDataType data_type, void* p_data,
         MarkItemEdited(id);
 
     // Display value using user-provided display format so user can add prefix/suffix/decorations to the value.
-    char value_buf[64];
-    const char* value_buf_end = value_buf + DataTypeFormatString(value_buf, IM_ARRAYSIZE(value_buf), data_type, p_data, format);
-    if (g.LogEnabled)
-        LogSetNextTextDecoration("{", "}");
-    RenderTextClipped(frame_bb.Min, frame_bb.Max, value_buf, value_buf_end, NULL, ImVec2(0.5f, 0.5f));
-
-    if (label_size.x > 0.0f)
-        RenderText(ImVec2(frame_bb.Max.x + style.ItemInnerSpacing.x, frame_bb.Min.y + style.FramePadding.y), label);
+    RenderCombinedLabelValue(label, label_size, data_type, p_data, format, frame_bb, inline_label);
 
     IMGUI_TEST_ENGINE_ITEM_INFO(id, label, g.LastItemData.StatusFlags | (temp_input_allowed ? ImGuiItemStatusFlags_Inputable : 0));
     return value_changed;
@@ -3013,8 +3042,10 @@ bool ImGui::SliderScalar(const char* label, ImGuiDataType data_type, void* p_dat
     const float w = CalcItemWidth();
 
     const ImVec2 label_size = CalcTextSize(label, NULL, true);
+    const bool inline_label = label_size.x > 0 && (flags & ImGuiSliderFlags_InlineLabel) != 0;
+
     const ImRect frame_bb(window->DC.CursorPos, window->DC.CursorPos + ImVec2(w, label_size.y + style.FramePadding.y * 2.0f));
-    const ImRect total_bb(frame_bb.Min, frame_bb.Max + ImVec2(label_size.x > 0.0f ? style.ItemInnerSpacing.x + label_size.x : 0.0f, 0.0f));
+    const ImRect total_bb(frame_bb.Min, frame_bb.Max + ImVec2(!inline_label && label_size.x > 0.0f ? style.ItemInnerSpacing.x + label_size.x : 0.0f, 0.0f));
 
     const bool temp_input_allowed = (flags & ImGuiSliderFlags_NoInput) == 0;
     ItemSize(total_bb, style.FramePadding.y);
@@ -3071,14 +3102,7 @@ bool ImGui::SliderScalar(const char* label, ImGuiDataType data_type, void* p_dat
         window->DrawList->AddRectFilled(grab_bb.Min, grab_bb.Max, GetColorU32(g.ActiveId == id ? ImGuiCol_SliderGrabActive : ImGuiCol_SliderGrab), style.GrabRounding);
 
     // Display value using user-provided display format so user can add prefix/suffix/decorations to the value.
-    char value_buf[64];
-    const char* value_buf_end = value_buf + DataTypeFormatString(value_buf, IM_ARRAYSIZE(value_buf), data_type, p_data, format);
-    if (g.LogEnabled)
-        LogSetNextTextDecoration("{", "}");
-    RenderTextClipped(frame_bb.Min, frame_bb.Max, value_buf, value_buf_end, NULL, ImVec2(0.5f, 0.5f));
-
-    if (label_size.x > 0.0f)
-        RenderText(ImVec2(frame_bb.Max.x + style.ItemInnerSpacing.x, frame_bb.Min.y + style.FramePadding.y), label);
+    RenderCombinedLabelValue(label, label_size, data_type, p_data, format, frame_bb, inline_label);
 
     IMGUI_TEST_ENGINE_ITEM_INFO(id, label, g.LastItemData.StatusFlags | (temp_input_allowed ? ImGuiItemStatusFlags_Inputable : 0));
     return value_changed;
@@ -5203,21 +5227,10 @@ bool ImGui::ColorEdit4(const char* label, float col[4], ImGuiColorEditFlags flag
         // RGB/HSV 0..255 Sliders
         const float w_items = w_inputs - style.ItemInnerSpacing.x * (components - 1);
 
-        const bool hide_prefix = (IM_TRUNC(w_items / components) <= CalcTextSize((flags & ImGuiColorEditFlags_Float) ? "M:0.000" : "M:000").x);
-        static const char* ids[4] = { "##X", "##Y", "##Z", "##W" };
-        static const char* fmt_table_int[3][4] =
-        {
-            {   "%3d",   "%3d",   "%3d",   "%3d" }, // Short display
-            { "R:%3d", "G:%3d", "B:%3d", "A:%3d" }, // Long display for RGBA
-            { "H:%3d", "S:%3d", "V:%3d", "A:%3d" }  // Long display for HSVA
-        };
-        static const char* fmt_table_float[3][4] =
-        {
-            {   "%0.3f",   "%0.3f",   "%0.3f",   "%0.3f" }, // Short display
-            { "R:%0.3f", "G:%0.3f", "B:%0.3f", "A:%0.3f" }, // Long display for RGBA
-            { "H:%0.3f", "S:%0.3f", "V:%0.3f", "A:%0.3f" }  // Long display for HSVA
-        };
-        const int fmt_idx = hide_prefix ? 0 : (flags & ImGuiColorEditFlags_DisplayHSV) ? 2 : 1;
+        static const char* labels[2][4] = {
+            { "R", "G", "B", "A" },
+            { "H", "S", "V", "A" }};
+        const int fmt_idx = (flags & ImGuiColorEditFlags_DisplayHSV) ? 1 : 0;
 
         float prev_split = 0.0f;
         for (int n = 0; n < components; n++)
@@ -5231,12 +5244,12 @@ bool ImGui::ColorEdit4(const char* label, float col[4], ImGuiColorEditFlags flag
             // FIXME: When ImGuiColorEditFlags_HDR flag is passed HS values snap in weird ways when SV values go below 0.
             if (flags & ImGuiColorEditFlags_Float)
             {
-                value_changed |= DragFloat(ids[n], &f[n], 1.0f / 255.0f, 0.0f, hdr ? 0.0f : 1.0f, fmt_table_float[fmt_idx][n]);
+                value_changed |= DragFloat(labels[fmt_idx][n], &f[n], 1.0f / 255.0f, 0.0f, hdr ? 0.0f : 1.0f, "%0.3f", ImGuiSliderFlags_InlineLabel);
                 value_changed_as_float |= value_changed;
             }
             else
             {
-                value_changed |= DragInt(ids[n], &i[n], 1.0f, 0, hdr ? 0 : 255, fmt_table_int[fmt_idx][n]);
+                value_changed |= DragInt(labels[fmt_idx][n], &i[n], 1.0f, 0, hdr ? 0 : 255, "%3d", ImGuiSliderFlags_InlineLabel);
             }
             if (!(flags & ImGuiColorEditFlags_NoOptions))
                 OpenPopupOnItemClick("context", ImGuiPopupFlags_MouseButtonRight);
